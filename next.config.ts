@@ -1,3 +1,4 @@
+import { createMDX } from "fumadocs-mdx/next";
 import type { NextConfig } from "next";
 
 // The Rybbit analytics proxy used to live here as a `rewrites()` entry.
@@ -25,4 +26,14 @@ const nextConfig: NextConfig = {
     },
 };
 
-export default nextConfig;
+// Fumadocs MDX integration. `createMDX()` reads `source.config.ts`, emits
+// compiled content into `src/.source/` (see `outDir` below), and registers
+// the `.mdx` webpack loader.
+// The wrapper is a no-op for non-MDX routes — self-host and hosted builds are
+// identical with or without docs content present.
+// `outDir` is set under `src/` so the existing `@/*` -> `./src/*` tsconfig
+// path alias resolves `@/.source` without adding a second alias. Keep this
+// in lockstep with the `.gitignore` entry and the import in `src/lib/source.ts`.
+const withMDX = createMDX({ outDir: "src/.source" });
+
+export default withMDX(nextConfig);
