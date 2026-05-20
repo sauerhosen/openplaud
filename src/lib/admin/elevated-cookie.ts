@@ -1,15 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { env } from "@/lib/env";
 
-/**
- * Signed elevated-session cookie for the admin dashboard. Format:
- * `${userId}.${issuedAt}.${HMAC-SHA256(userId.issuedAt, BETTER_AUTH_SECRET)}`.
- *
- * Two TTLs (both env-tunable) are enforced at gate time:
- *   - `ADMIN_REAUTH_TTL_MINUTES` gates read access.
- *   - `ADMIN_MUTATION_TTL_MINUTES` additionally required for mutations.
- */
-
 export const ADMIN_ELEVATED_COOKIE = "openplaud_admin_elev";
 
 interface ElevatedPayload {
@@ -37,12 +28,7 @@ export function signElevatedCookie(userId: string, now = Date.now()): string {
     return `${userId}.${now}.${mac}`;
 }
 
-/**
- * Verify the cookie's structure + HMAC. Returns the payload on success,
- * or `null` on any structural / MAC failure. Expiry is checked
- * separately so the gate can distinguish expired (reauth) from
- * tampered (404).
- */
+/** Verify the cookie's structure + HMAC. Expiry is checked separately. */
 export function verifyElevatedCookie(
     raw: string | undefined | null,
 ): ElevatedPayload | null {

@@ -1,15 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-/**
- * Render `scripts/install.sh` with `{{VERSION}}` substituted.
- *
- * The standalone Next.js output excludes files outside the build graph;
- * `next.config.ts` must declare `outputFileTracingIncludes` for both
- * `/install.sh` and `/[version]/install.sh` so this read succeeds in
- * the Docker image.
- */
-
 const VERSION_RE = /^v\d+\.\d+\.\d+$/;
 
 let cachedScript: string | null = null;
@@ -30,11 +21,6 @@ export async function renderInstallScript(version: string): Promise<string> {
     return script.replaceAll("{{VERSION}}", version);
 }
 
-/**
- * Latest release tag from GitHub. Cached for 5 min via Next's fetch
- * cache (unauthenticated GitHub limit is 60 req/hr). Returns `null` on
- * any failure — callers should fall back to a baked-in default.
- */
 export async function fetchLatestReleaseTag(): Promise<string | null> {
     try {
         const res = await fetch(

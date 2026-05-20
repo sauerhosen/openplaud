@@ -31,7 +31,7 @@ Marketing surfaces (landing page copy, README feature sections) are exempt — t
 ### Comments
 
 JSDoc on exported APIs only. No narrative or strategy comments in source.
-Design rationale goes in `docs/`, or in the commit message.
+Design rationale goes in the commit message.
 
 ## Commands
 

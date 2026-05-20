@@ -1,5 +1,3 @@
-// OTP-based Plaud authentication. See `docs/architecture/plaud-tokens.md`.
-
 import { AppError, ErrorCode } from "@/lib/errors";
 import { DEFAULT_PLAUD_API_BASE } from "./client";
 import { plaudFetch } from "./fetch";
@@ -9,9 +7,7 @@ import { PLAUD_USER_AGENT } from "./servers";
 export interface PlaudSendCodeResponse {
     status: number;
     msg: string;
-    /** Short-lived JWT to pass back in otp-login */
     token?: string;
-    /** Present when status === -302 (regional redirect). */
     data?: {
         domains?: {
             api?: string;
@@ -22,26 +18,21 @@ export interface PlaudSendCodeResponse {
 export interface PlaudOtpLoginResponse {
     status: number;
     msg: string;
-    /** Tokens may appear at root or nested under `data` across regions. */
     access_token?: string;
     data?: {
         access_token?: string;
     };
 }
 
-/**
- * Send a one-time verification code to the user's email. Transparently
- * follows up to `MAX_REGION_REDIRECTS` regional redirects (`status === -302`).
- */
 const MAX_REGION_REDIRECTS = 3;
 
+/** Send an OTP code. Follows regional redirects (`status === -302`). */
 export async function plaudSendCode(
     email: string,
     apiBase: string = DEFAULT_PLAUD_API_BASE,
     _redirectCount = 0,
 ): Promise<{
     token: string;
-    /** Final resolved API base (may differ from input after region redirect) */
     apiBase: string;
 }> {
     const res = await plaudFetch(`${apiBase}/auth/otp-send-code`, {
@@ -55,7 +46,6 @@ export async function plaudSendCode(
 
     const body = await safeParseJson<PlaudSendCodeResponse>(res);
 
-    // Regional redirect → retry against the correct regional server.
     if (body.status === -302 && body.data?.domains?.api) {
         if (_redirectCount >= MAX_REGION_REDIRECTS) {
             throw new AppError(
@@ -114,17 +104,12 @@ export async function plaudVerifyOtp(
     return { accessToken };
 }
 
-/**
- * Decode a Plaud access token's `exp` claim without verifying signature.
- * UX-only; never use the decoded payload for any security decision.
- * Returns `null` on any malformed input.
- */
+/** Decode the JWT `exp` claim without verifying. UX hint only — never authorise from this. */
 export function decodeAccessTokenExpiry(token: string): Date | null {
     if (typeof token !== "string") return null;
     const parts = token.split(".");
     if (parts.length !== 3) return null;
     try {
-        // base64url → base64 → utf-8 JSON
         const b64 =
             parts[1].replace(/-/g, "+").replace(/_/g, "/") +
             "=".repeat((4 - (parts[1].length % 4)) % 4);
@@ -142,12 +127,7 @@ export function decodeAccessTokenExpiry(token: string): Date | null {
     }
 }
 
-/**
- * Best-effort fetch of /user/me to derive the linked Plaud email.
- * Returns `null` on any failure — UX nicety, not a correctness requirement.
- * SSRF posture: caller must validate `apiBase` via `isValidPlaudApiUrl`
- * before invoking.
- */
+/** Best-effort `/user/me` email lookup. Caller must pre-validate `apiBase`. */
 export async function fetchPlaudUserMeEmail(
     accessToken: string,
     apiBase: string,
@@ -167,7 +147,6 @@ export async function fetchPlaudUserMeEmail(
             data?: { email?: unknown };
             email?: unknown;
         };
-        // Root-level vs data-nested shape varies across regions.
         const raw =
             (typeof body.email === "string" && body.email) ||
             (typeof body.data?.email === "string" && body.data.email) ||

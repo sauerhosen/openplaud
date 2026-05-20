@@ -10,7 +10,6 @@ export interface PersistPlaudConnectionInput {
     userId: string;
     accessToken: string;
     apiBase: string;
-    /** Lowercased Plaud account email, or null if unknown. */
     plaudEmail: string | null;
 }
 
@@ -19,20 +18,13 @@ export interface PersistPlaudConnectionResult {
     workspaceId: string | null;
 }
 
-/**
- * Validate a Plaud user token end-to-end and persist it as the user's
- * connection. Idempotent: re-running with a fresh token replaces the
- * stored one and reconciles devices. Throws on validation failure —
- * callers must not have written anything before invoking this.
- */
+/** Validate a Plaud user token and persist the connection. Idempotent. */
 export async function persistPlaudConnection({
     userId,
     accessToken,
     apiBase,
     plaudEmail,
 }: PersistPlaudConnectionInput): Promise<PersistPlaudConnectionResult> {
-    // Workspace discovery is best-effort. If unavailable, the client
-    // falls back to the UT directly (see PlaudClient).
     let resolvedWorkspaceId: string | null = null;
     try {
         const list = await listPlaudWorkspaces(accessToken, apiBase);
@@ -44,9 +36,6 @@ export async function persistPlaudConnection({
         );
     }
 
-    // End-to-end validation. Re-throw the underlying AppError verbatim
-    // so apiHandler honours its statusCode (wrapping would flatten the
-    // auth-vs-upstream distinction).
     const client = new PlaudClient(accessToken, apiBase, resolvedWorkspaceId);
     let deviceList: PlaudDeviceListResponse;
     try {
@@ -59,13 +48,10 @@ export async function persistPlaudConnection({
         throw err;
     }
 
-    // plaud_connections has no unique constraint on user_id. A per-user
-    // transaction-scoped advisory lock serialises concurrent connect
-    // attempts so a double-click can't insert duplicate rows; the lock
-    // is released automatically on commit/abort.
     const encryptedAccessToken = encrypt(accessToken);
 
     await db.transaction(async (tx) => {
+        // Advisory lock serialises concurrent connect attempts per user.
         await tx.execute(
             sql`SELECT pg_advisory_xact_lock(hashtextextended(${`plaud_connect:${userId}`}, 0))`,
         );
@@ -77,8 +63,6 @@ export async function persistPlaudConnection({
             .limit(1);
 
         if (existingConnection) {
-            // Re-scope by userId on UPDATE (defence-in-depth alongside
-            // the userId-scoped SELECT above).
             await tx
                 .update(plaudConnections)
                 .set({
@@ -104,9 +88,6 @@ export async function persistPlaudConnection({
             });
         }
 
-        // Reconcile devices. Schema enforces unique (userId, serialNumber).
-        // Inside the transaction so an aborted connect doesn't leave a
-        // half-written device list against the previous token.
         for (const device of deviceList.data_devices) {
             const [existingDevice] = await tx
                 .select()

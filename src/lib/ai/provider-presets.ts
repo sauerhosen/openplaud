@@ -1,21 +1,3 @@
-/**
- * Shared preset list for the Add/Edit AI provider dialogs.
- *
- * `LOCAL_PRESET_NAMES` are presets pointing at the user's machine; on
- * `IS_HOSTED=true` they're hidden from the dropdown because the hosted
- * process can't reach loopback. `validateAiBaseUrl` enforces the same
- * rule server-side.
- *
- * `transcriptionStyle` selects the API surface:
- *   - `"whisper"` -> OpenAI-compatible `/v1/audio/transcriptions`.
- *   - `"chat"`    -> `/v1/chat/completions` with an `input_audio`
- *     content part (used by OpenRouter; see issue #122).
- *
- * Adding a new transcription model: append its exact id to the
- * provider's `knownTranscriptionModels`. The dialog also offers a
- * "Custom" escape hatch for ids we don't know about yet.
- */
-
 export type TranscriptionStyle = "whisper" | "chat";
 
 export interface ProviderPreset {
@@ -23,14 +5,8 @@ export interface ProviderPreset {
     baseUrl: string;
     placeholder: string;
     defaultModel: string;
-    /** API surface for transcription. Defaults to whisper when absent. */
     transcriptionStyle: TranscriptionStyle;
-    /**
-     * If true, the dialog can fetch audio-capable models from the
-     * provider's `/v1/models` endpoint. OpenRouter only, today.
-     */
     fetchAudioModels?: boolean;
-    /** Hand-curated transcription model ids for the dropdown. */
     knownTranscriptionModels?: readonly string[];
 }
 
@@ -60,7 +36,6 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
         ],
     },
     {
-        // Together AI's model ids are prefixed `openai/`.
         name: "Together AI",
         baseUrl: "https://api.together.xyz/v1",
         placeholder: "...",
@@ -72,8 +47,6 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
         ],
     },
     {
-        // OpenRouter has no `/v1/audio/transcriptions`; audio routes
-        // through chat-completions with audio-input models. See #122.
         name: "OpenRouter",
         baseUrl: "https://openrouter.ai/api/v1",
         placeholder: "sk-or-...",
@@ -109,7 +82,6 @@ export const LOCAL_PRESET_NAMES: ReadonlySet<string> = new Set([
     "Ollama",
 ]);
 
-/** Presets visible in the dropdown for a given deployment mode. */
 export function getVisiblePresets({
     isHosted,
 }: {
@@ -127,10 +99,6 @@ export function isLocalPreset(name: string): boolean {
     return LOCAL_PRESET_NAMES.has(name);
 }
 
-/**
- * Resolve the transcription style for a stored provider name.
- * Unknown providers default to whisper.
- */
 export function getTranscriptionStyle(
     providerName: string,
 ): TranscriptionStyle {

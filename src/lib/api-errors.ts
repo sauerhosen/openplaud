@@ -1,27 +1,13 @@
-/**
- * Client-side helper for the unified API error envelope:
- *
- *     { error: string, code: ErrorCode, details?: Record<string, unknown> }
- *
- * Callers must switch on `code`, never on the human-readable `error`.
- * See `docs/error-codes.md` for the code reference.
- */
-
 import { toast } from "sonner";
 import type { ErrorCode } from "@/lib/errors";
 import { buildReportBugUrl } from "@/lib/report-bug";
 
 export interface ApiErrorBody {
     error: string;
-    code: ErrorCode | string; // string fallback for older / out-of-band errors
+    code: ErrorCode | string;
     details?: Record<string, unknown>;
 }
 
-/**
- * Parse a non-OK `Response` into the unified envelope. Always returns
- * `{ error, code }`; falls back to a synthetic envelope when an
- * upstream proxy replaces the body with non-JSON.
- */
 export async function parseApiError(response: Response): Promise<ApiErrorBody> {
     try {
         const body = (await response.json()) as Partial<ApiErrorBody>;
@@ -36,16 +22,13 @@ export async function parseApiError(response: Response): Promise<ApiErrorBody> {
                 ...(body.details && { details: body.details }),
             };
         }
-    } catch {
-        // fall through
-    }
+    } catch {}
     return {
         error: response.statusText || "Request failed",
         code: "UNKNOWN_ERROR",
     };
 }
 
-/** Returns a non-empty error string for toast display. */
 export async function getApiErrorMessage(
     response: Response,
     fallback = "Request failed",
@@ -55,18 +38,11 @@ export async function getApiErrorMessage(
 }
 
 export interface ToastApiErrorOptions {
-    /** Fallback message if the server omits a human-readable `error`. */
     fallback?: string;
-    /** What the user was doing when the error fired (bug-report seed). */
     errorContext?: string;
 }
 
-/**
- * Toast a non-OK API response. When the envelope carries an `errorId`
- * (5xx through `apiHandler`), surfaces a one-click "Report" action that
- * opens a pre-filled GitHub issue. Returns the parsed envelope so
- * callers can branch on `code` for recovery flows.
- */
+/** Toast a non-OK response; attaches a "Report" action when an `errorId` is present. */
 export async function toastApiError(
     response: Response,
     opts: ToastApiErrorOptions = {},

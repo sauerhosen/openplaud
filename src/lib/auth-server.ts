@@ -6,7 +6,6 @@ import { users } from "@/db/schema";
 import { auth } from "./auth";
 import { AppError, ErrorCode } from "./errors";
 
-/** Server-side session getter (server components / API routes). */
 export async function getSession() {
     const session = await auth.api.getSession({
         headers: await headers(),
@@ -15,10 +14,7 @@ export async function getSession() {
     return session;
 }
 
-/**
- * Require an authenticated, non-suspended session. Redirects to
- * `/login` or `/suspended`. For use in server components.
- */
+/** Require an authenticated, non-suspended session. Redirects on failure. */
 export async function requireAuth() {
     const session = await getSession();
 
@@ -26,8 +22,6 @@ export async function requireAuth() {
         redirect("/login");
     }
 
-    // Suspension check. PK lookup; on self-host `suspendedAt` is always
-    // null (the admin gate is behind IS_HOSTED).
     const [u] = await db
         .select({ suspendedAt: users.suspendedAt })
         .from(users)
@@ -40,7 +34,6 @@ export async function requireAuth() {
     return session;
 }
 
-/** Redirect to dashboard if already authenticated. */
 export async function redirectIfAuthenticated() {
     const session = await getSession();
 
@@ -49,14 +42,7 @@ export async function redirectIfAuthenticated() {
     }
 }
 
-/**
- * API-route variant of `requireAuth`. Throws `AppError` on failure so
- * `apiHandler` produces the unified error envelope.
- *
- * Failure modes:
- *   - No session            -> AppError(AUTH_SESSION_MISSING, 401)
- *   - `users.suspendedAt`   -> AppError(ACCOUNT_SUSPENDED, 403)
- */
+/** API-route auth gate. Throws typed `AppError` on failure. */
 export async function requireApiSession(
     request: Request,
 ): Promise<NonNullable<Awaited<ReturnType<typeof getSession>>>> {

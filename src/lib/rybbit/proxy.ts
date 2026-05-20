@@ -1,18 +1,9 @@
 import { NextResponse } from "next/server";
 import { env } from "@/lib/env";
 
-// Runtime proxy for Rybbit's same-origin endpoints.
-//
-// Folder name MUST be `src/app/api/int/`, not `_int/`: App Router
-// treats `_`-prefixed folders as private and drops them from the route
-// manifest (silent 404s in production).
-//
-// Hosted-only; self-host always 404s. Headers are built from scratch
-// rather than copied from the request — cookies and `Authorization`
-// must never reach the analytics backend, and rebuilding ensures any
-// future header the middleware misses still can't leak through.
-// Only XFF / X-Real-IP and User-Agent are forwarded (Rybbit derives
-// geolocation from XFF).
+// Cookies and `Authorization` must never reach the analytics backend;
+// build outbound headers from scratch.
+// Folder MUST be `src/app/api/int/`, not `_int/` (App Router private folder).
 
 function gated(): { ok: false; res: NextResponse } | { ok: true } {
     if (!env.IS_HOSTED || !env.RYBBIT_HOST || !env.RYBBIT_SITE_ID) {
@@ -25,7 +16,6 @@ function gated(): { ok: false; res: NextResponse } | { ok: true } {
 }
 
 function upstreamUrl(path: string): string {
-    // `RYBBIT_HOST` is non-empty by virtue of `gated()`.
     const host = (env.RYBBIT_HOST as string).replace(/\/$/, "");
     const suffix = path.startsWith("/") ? path : `/${path}`;
     return `${host}${suffix}`;
@@ -35,8 +25,6 @@ function forwardClientHeaders(req: Request, headers: Headers): void {
     const ua = req.headers.get("user-agent");
     if (ua) headers.set("User-Agent", ua);
 
-    // Rebuild XFF from the inbound header so the upstream sees the
-    // real client IP rather than the app's egress.
     const xff = req.headers.get("x-forwarded-for");
     if (xff) {
         headers.set("X-Forwarded-For", xff);
@@ -47,9 +35,7 @@ function forwardClientHeaders(req: Request, headers: Headers): void {
 }
 
 export interface ProxyRybbitGetOptions {
-    /** Cache-Control sent to the browser. Defaults to `no-store`. */
     cacheControl?: string;
-    /** Fallback `Content-Type` if upstream omits one. */
     fallbackContentType?: string;
 }
 

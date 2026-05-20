@@ -1,16 +1,3 @@
-/**
- * Validates an AI provider `baseUrl` for the current deployment mode.
- *
- * On the hosted instance (`IS_HOSTED=true`) the app process can't reach
- * the user's machine, so loopback / unspecified addresses (localhost,
- * 127.0.0.0/8, 0.0.0.0, ::1, ::) make no sense and silently break AI
- * calls. We reject them at the API layer and surface a short message
- * explaining the user should self-host to use LM Studio / Ollama.
- *
- * On self-host (`IS_HOSTED=false`) every value is allowed — local AI is
- * a first-class path (Ollama, LM Studio, docker-network hostnames).
- */
-
 export const HOSTED_LOCAL_BASE_URL_MESSAGE =
     "We can't reach `localhost` or other private addresses from the hosted app — to use LM Studio or Ollama, self-host OpenPlaud (`docker compose up`).";
 
@@ -22,11 +9,7 @@ interface ValidateOptions {
     isHosted: boolean;
 }
 
-/**
- * @param input  Raw user-supplied base URL. `null`, `undefined`, or empty
- *               string are treated as "no override" and always allowed
- *               (callers fall back to the OpenAI default).
- */
+/** Validate an AI provider `baseUrl`. Hosted mode rejects loopback. */
 export function validateAiBaseUrl(
     input: string | null | undefined,
     { isHosted }: ValidateOptions,
@@ -35,7 +18,6 @@ export function validateAiBaseUrl(
     const trimmed = input.trim();
     if (trimmed === "") return { ok: true };
 
-    // Self-host accepts anything — local AI must keep working.
     if (!isHosted) return { ok: true };
 
     let parsed: URL;
@@ -49,9 +31,6 @@ export function validateAiBaseUrl(
         };
     }
 
-    // URL.hostname keeps brackets for IPv6 literals (`[::1]`); strip them
-    // so the loopback check sees the bare address. Also drop any trailing
-    // dot — DNS treats `localhost.` as equivalent to `localhost`.
     let host = parsed.hostname.toLowerCase();
     if (host.startsWith("[") && host.endsWith("]")) {
         host = host.slice(1, -1);
@@ -68,18 +47,14 @@ export function validateAiBaseUrl(
 
 function isLoopbackOrUnspecified(host: string): boolean {
     if (host === "localhost") return true;
-    // RFC 6761: `*.localhost` resolves to loopback.
     if (host.endsWith(".localhost")) return true;
     if (host === "0.0.0.0") return true;
     if (host === "::1" || host === "::") return true;
     if (host === "0:0:0:0:0:0:0:1" || host === "0:0:0:0:0:0:0:0") return true;
-    // 127.0.0.0/8 is entirely loopback.
     if (/^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) {
         const octets = host.split(".").map(Number);
         if (octets.every((o) => o >= 0 && o <= 255)) return true;
     }
-    // IPv4-mapped IPv6 (`::ffff:7f00:0`..`::ffff:7fff:ffff`) covers
-    // loopback after WHATWG normalisation of `::ffff:a.b.c.d`.
     const v4MappedLoopback = /^::ffff:7[0-9a-f]{1,3}:[0-9a-f]{1,4}$/;
     if (v4MappedLoopback.test(host)) {
         const lastTwoOctets = host.slice("::ffff:".length);

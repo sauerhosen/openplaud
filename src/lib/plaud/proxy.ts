@@ -1,8 +1,3 @@
-/**
- * Outbound proxy selection for Plaud API calls. See
- * `docs/architecture/http-client.md` for the overall design.
- */
-
 import { env } from "@/lib/env";
 
 interface WebshareProxy {
@@ -54,12 +49,7 @@ async function fetchProxyList(): Promise<WebshareProxy[]> {
     }
 }
 
-/**
- * Whether `url` is in the Plaud-proxy scope. Matches plaud.ai and its
- * subdomains, and respects `PLAUD_PROXY_SCOPE="api-only"` (which exempts
- * the signed-URL CDN at resource.plaud.ai). Unknown/malformed URLs are
- * always rejected so non-Plaud traffic is never routed through the proxy.
- */
+/** Whether `url` should route through the Plaud proxy. */
 export function shouldProxyPlaud(url: string): boolean {
     try {
         const u = new URL(url);
@@ -77,20 +67,13 @@ export function shouldProxyPlaud(url: string): boolean {
 }
 
 export interface SelectedProxy {
-    /** Webshare proxy id — stable handle used for blacklisting. */
     id: string;
-    /** http://user:pass@host:port form. Contains credentials — do not log. */
+    /** Contains credentials; do not log. */
     url: string;
-    /** host:port — safe to log. */
     label: string;
 }
 
-/**
- * Pick a proxy from the cached Webshare list, lazily refreshing on
- * expiry or when every cached entry has been blacklisted. Returns null
- * when Webshare is unconfigured or has no valid proxies — callers fall
- * back to direct egress.
- */
+/** Pick a proxy from the cached list, or `null` when unconfigured/empty. */
 export async function getPlaudProxyUrl(): Promise<SelectedProxy | null> {
     if (!env.WEBSHARE_API_KEY) return null;
 
@@ -105,8 +88,6 @@ export async function getPlaudProxyUrl(): Promise<SelectedProxy | null> {
 
     let available = proxies.filter((p) => !badProxyIds.has(p.id));
     if (available.length === 0 && !justRefreshed) {
-        // All blacklisted — force one refresh. Guarded by `justRefreshed`
-        // so an upstream outage doesn't burn two list requests per call.
         proxies = await fetchProxyList();
         available = proxies;
     }
@@ -121,12 +102,7 @@ export async function getPlaudProxyUrl(): Promise<SelectedProxy | null> {
     return { id: proxy.id, url, label };
 }
 
-/**
- * Mark `proxy` as bad. Takes the proxy explicitly (rather than reading a
- * "last served" module global) so concurrent `plaudFetch` calls cannot
- * blacklist each other's proxy by race — each caller invalidates exactly
- * the `SelectedProxy` it just used.
- */
+/** Mark a proxy bad. Pass the exact `SelectedProxy` returned by `getPlaudProxyUrl` to avoid races. */
 export function invalidatePlaudProxy(proxy: SelectedProxy): void {
     badProxyIds.add(proxy.id);
 }
@@ -135,7 +111,7 @@ export function isPlaudProxyConfigured(): boolean {
     return Boolean(env.WEBSHARE_API_KEY);
 }
 
-/** Test-only: reset module state between unit tests. */
+/** Test-only. */
 export function _resetPlaudProxyCacheForTest(): void {
     cachedList = null;
     badProxyIds = new Set();

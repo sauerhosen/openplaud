@@ -1,12 +1,3 @@
-/**
- * Per-user rate limit for `POST /api/plaud/sync`.
- *
- * Multi-process safe: backed by the `apiRateLimitBuckets` Postgres table
- * via `consumeRateLimitBucket`, so it holds across hosted-mode workers.
- * Complements client-side dedup in `use-auto-sync.ts` and in-process
- * promise dedup in `syncRecordingsForUser`.
- */
-
 import { NextResponse } from "next/server";
 import { env } from "@/lib/env";
 import { ErrorCode } from "@/lib/errors";
@@ -14,14 +5,7 @@ import { consumeRateLimitBucket } from "@/lib/rate-limit";
 
 const WINDOW_MS = 60_000;
 
-/**
- * Consume one token from the per-user sync bucket. Returns `null` when
- * the request is allowed, or a ready-to-return 429 `NextResponse` when
- * the bucket is exhausted.
- *
- *     const limited = await enforcePlaudSyncRateLimit(userId);
- *     if (limited) return limited;
- */
+/** Per-user rate limit for `POST /api/plaud/sync`. Returns null when allowed, or a 429 response. */
 export async function enforcePlaudSyncRateLimit(
     userId: string,
 ): Promise<NextResponse | null> {

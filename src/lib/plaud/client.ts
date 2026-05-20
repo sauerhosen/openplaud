@@ -18,18 +18,12 @@ export interface PlaudUpdateFilenameResponse {
 
 export const DEFAULT_PLAUD_API_BASE = PLAUD_SERVERS[DEFAULT_SERVER_KEY].apiBase;
 const MAX_RETRIES = 3;
-const INITIAL_RETRY_DELAY = 1000; // 1 second
+const INITIAL_RETRY_DELAY = 1000;
 
 function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/**
- * Map a Plaud HTTP failure to a structured `AppError`:
- *   401 → PLAUD_INVALID_TOKEN (reconnect path)
- *   4xx → PLAUD_API_ERROR (surfaced as 400)
- *   5xx → PLAUD_UPSTREAM_ERROR (surfaced as 502, after MAX_RETRIES).
- */
 function plaudHttpError(status: number, msg: string): AppError {
     if (status === 401) {
         return new AppError(
@@ -52,11 +46,6 @@ function plaudHttpError(status: number, msg: string): AppError {
     });
 }
 
-/**
- * Plaud API client. Takes a UT in its constructor and lazily mints a WT
- * for recording endpoints; falls back to the UT directly if the mint
- * fails. See `docs/architecture/plaud-tokens.md`.
- */
 export class PlaudClient {
     private readonly userToken: string;
     private readonly apiBase: string;
@@ -75,24 +64,14 @@ export class PlaudClient {
         this.resolvedWorkspaceId = workspaceId ?? undefined;
     }
 
-    /**
-     * Currently-known workspace ID. Populated by the constructor (cache
-     * hit) or after the first authenticated request. Callers persist
-     * this back to the DB when it differs from what they passed in.
-     */
     get workspaceId(): string | undefined {
         return this.resolvedWorkspaceId;
     }
 
-    /** Whether this client fell back to the UT because WT mint failed. */
     get usingUserTokenFallback(): boolean {
         return this.workspaceFallbackToUt;
     }
 
-    /**
-     * Lazily ensure a workspace token is available. Concurrent callers
-     * share a single in-flight resolution so we don't mint multiple WTs.
-     */
     private async ensureWorkspaceToken(): Promise<void> {
         if (this.workspaceToken || this.workspaceFallbackToUt) return;
         if (!this.workspaceFetchInFlight) {
@@ -115,8 +94,6 @@ export class PlaudClient {
             this.workspaceToken = workspaceToken;
             this.resolvedWorkspaceId = workspaceId;
         } catch (err) {
-            // Fall back to the UT directly. Logged so the dev info
-            // endpoint can surface that the connection is in fallback.
             console.warn(
                 "[plaud] workspace token mint failed, falling back to user token:",
                 err instanceof Error ? err.message : err,
@@ -125,11 +102,6 @@ export class PlaudClient {
         }
     }
 
-    /**
-     * Authenticated request with retry on 429 (honours Retry-After), 5xx,
-     * and `TypeError` from fetch. Up to `MAX_RETRIES` attempts with
-     * exponential backoff.
-     */
     private async request<T>(
         endpoint: string,
         options?: RequestInit,
@@ -156,7 +128,7 @@ export class PlaudClient {
                     const retryAfter = response.headers.get("Retry-After");
                     const delay = retryAfter
                         ? Number.parseInt(retryAfter, 10) * 1000
-                        : INITIAL_RETRY_DELAY * 2 ** retryCount; // Exponential backoff
+                        : INITIAL_RETRY_DELAY * 2 ** retryCount;
                     await sleep(delay);
                     return this.request<T>(endpoint, options, retryCount + 1);
                 }
@@ -203,9 +175,6 @@ export class PlaudClient {
             }
 
             if (error instanceof AppError) throw error;
-            // Network blow-up / DNS / AbortError past the retry budget,
-            // or a body that failed parsing. Surface as PLAUD_UPSTREAM_ERROR
-            // rather than letting apiHandler downgrade to INTERNAL_ERROR.
             throw new AppError(
                 ErrorCode.PLAUD_UPSTREAM_ERROR,
                 "Failed to communicate with Plaud. Please try again later.",
@@ -218,13 +187,6 @@ export class PlaudClient {
         return this.request<PlaudDeviceListResponse>("/device/list");
     }
 
-    /**
-     * @param skip - Number of recordings to skip
-     * @param limit - Maximum number of recordings to return
-     * @param isTrash - 0 = active, 1 = trash
-     * @param sortBy - Field to sort by (default: edit_time)
-     * @param isDesc - Sort in descending order (default: true)
-     */
     async getRecordings(
         skip: number = 0,
         limit: number = 99999,
@@ -245,10 +207,6 @@ export class PlaudClient {
         );
     }
 
-    /**
-     * @param fileId - The recording file ID
-     * @param isOpus - Whether to get OPUS format URL (default: true)
-     */
     async getTempUrl(
         fileId: string,
         isOpus: boolean = true,
@@ -262,10 +220,6 @@ export class PlaudClient {
         );
     }
 
-    /**
-     * @param fileId - The recording file ID
-     * @param preferOpus - Whether to prefer OPUS format (smaller size)
-     */
     async downloadRecording(
         fileId: string,
         preferOpus: boolean = true,
@@ -277,7 +231,6 @@ export class PlaudClient {
                     ? tempUrlResponse.temp_url_opus
                     : tempUrlResponse.temp_url;
 
-            // resource.plaud.ai is in the same proxy scope as the API.
             const response = await plaudFetch(downloadUrl);
             if (!response.ok) {
                 throw new AppError(
@@ -300,7 +253,6 @@ export class PlaudClient {
         }
     }
 
-    /** Returns true if the bearer token is accepted by /device/list. */
     async testConnection(): Promise<boolean> {
         try {
             await this.listDevices();
@@ -310,10 +262,6 @@ export class PlaudClient {
         }
     }
 
-    /**
-     * @param fileId - The recording file ID
-     * @param filename - New filename to set
-     */
     async updateFilename(
         fileId: string,
         filename: string,
@@ -326,7 +274,3 @@ export class PlaudClient {
 }
 
 export * from "./types";
-
-// `createPlaudClient` (which decrypts the stored bearer token) lives in
-// ./client-factory so importing this class from tests doesn't pull in
-// the encryption / env validation chain.

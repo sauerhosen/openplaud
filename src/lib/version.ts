@@ -1,17 +1,10 @@
 import packageJson from "../../package.json" with { type: "json" };
 
-/** Single source of truth for the running OpenPlaud version. */
 export const APP_VERSION = packageJson.version;
 export const APP_VERSION_TAG = `v${packageJson.version}`;
 export const APP_RELEASE_URL = `https://github.com/openplaud/openplaud/releases/tag/${APP_VERSION_TAG}`;
 
-/**
- * Compare two 3-part dotted version strings ("0.4.2", "0.5.0").
- * Returns -1 / 0 / 1, or `null` on input that is not a parseable bare
- * `X.Y.Z` (optionally `v`-prefixed). Returning `null` rather than 0 on
- * bad input is deliberate so callers don't silently coerce malformed
- * versions into "equal" and hide legitimate updates.
- */
+/** Compare `vX.Y.Z` strings. Returns `null` (not 0) on unparseable input. */
 export function compareSemver(a: string, b: string): -1 | 0 | 1 | null {
     const parts = (s: string): [number, number, number] | null => {
         const p = s.replace(/^v/, "").split(".");

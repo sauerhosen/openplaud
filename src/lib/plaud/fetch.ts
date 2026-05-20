@@ -1,9 +1,3 @@
-/**
- * `plaudFetch` — `fetch`-shaped wrapper that routes Plaud-bound requests
- * through the operator's configured proxy, with a single rotation on
- * proxy-attributable failures. See `docs/architecture/http-client.md`.
- */
-
 import {
     fetch as impersonateFetch,
     type BodyInit as WreqBodyInit,
@@ -16,10 +10,10 @@ import {
 } from "./proxy";
 
 const MAX_PROXY_ROTATIONS = 1;
-
 const IMPERSONATE_BROWSER = "chrome_142" as const;
 const IMPERSONATE_OS = "windows" as const;
 
+/** `fetch`-shaped wrapper that routes Plaud-bound requests through the configured proxy. */
 export async function plaudFetch(
     url: string,
     init?: RequestInit,
@@ -31,7 +25,6 @@ export async function plaudFetch(
     let attempt = 0;
     let currentProxy: SelectedProxy | null = await getPlaudProxyUrl();
     if (!currentProxy) {
-        // Webshare unconfigured or list empty → direct fetch.
         return fetch(url, init);
     }
 
@@ -41,10 +34,6 @@ export async function plaudFetch(
             response = (await impersonateFetch(url, {
                 method: init?.method,
                 headers: init?.headers as Record<string, string> | undefined,
-                // wreq-js's `BodyInit` is narrower than the DOM's (no
-                // ReadableStream). Plaud callers only send JSON-string
-                // bodies, so this cast is safe in practice; a streamed
-                // body would surface as a type error.
                 body: init?.body as WreqBodyInit | null | undefined,
                 signal: init?.signal ?? undefined,
                 proxy: currentProxy.url,
@@ -83,13 +72,9 @@ export async function plaudFetch(
             );
             invalidatePlaudProxy(currentProxy);
 
-            // Resolve the next proxy BEFORE touching the body. If we
-            // cancel the body and then discover there is no next proxy,
-            // we would return a `Response` whose body has already been
-            // consumed and any JSON parse downstream would throw.
+            // Resolve next proxy before draining body; returning a drained Response would break JSON parse downstream.
             const next = await getPlaudProxyUrl();
             if (!next) return response;
-
             await response.body?.cancel().catch(() => undefined);
             currentProxy = next;
             attempt += 1;
@@ -117,7 +102,5 @@ function logProxyEvent(
     );
 }
 
-/** Test-only no-op; module holds no fetch-side cache. */
-export function _resetPlaudFetchForTest(): void {
-    // intentionally empty
-}
+/** Test-only no-op. */
+export function _resetPlaudFetchForTest(): void {}

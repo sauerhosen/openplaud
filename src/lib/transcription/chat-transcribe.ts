@@ -1,21 +1,10 @@
-/**
- * Chat-completions-based transcription. Used for providers exposing
- * audio-input LLMs via `/v1/chat/completions` instead of
- * `/v1/audio/transcriptions` (OpenRouter; issue #122).
- *
- * Format support is mp3 / wav only — the OpenAI chat-audio spec.
- * No segment timestamps; `detectedLanguage` echoes the language hint.
- */
-
 import type { OpenAI } from "openai";
 
 export interface ChatTranscribeArgs {
     client: OpenAI;
     model: string;
     audioBuffer: Buffer;
-    /** MIME content type from the stored audio (e.g. "audio/mpeg"). */
     contentType: string;
-    /** ISO language hint forwarded to the model in the prompt. */
     language?: string;
 }
 
@@ -61,9 +50,6 @@ export async function chatTranscribe({
         ? `${TRANSCRIBE_INSTRUCTION} The audio language is ${language}.`
         : TRANSCRIBE_INSTRUCTION;
 
-    // The OpenAI SDK doesn't yet type `input_audio` on
-    // `chat.completions.create`. The wire-level param is correct;
-    // structural cast, no runtime transform.
     const response = await client.chat.completions.create({
         model,
         messages: [

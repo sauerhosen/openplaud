@@ -1,8 +1,4 @@
-/**
- * Format a duration in seconds: `M:SS` under one hour, `H:MM:SS` above.
- * Non-finite or negative inputs collapse to `"0:00"` so we never render
- * `"NaN:NaN"` while audio metadata is still loading.
- */
+/** Format seconds as `M:SS` / `H:MM:SS`. Non-finite/negative -> `"0:00"`. */
 export function formatDuration(seconds: number): string {
     if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
     const total = Math.floor(seconds);
@@ -14,13 +10,7 @@ export function formatDuration(seconds: number): string {
     return `${m}:${pad2(s)}`;
 }
 
-/**
- * Format `current` using the same segment structure as `reference` so
- * a clock label like `currentTime / duration` keeps a stable width.
- * Hour-digit count tracks `reference`; minute zero-pad kicks in at
- * `reference >= 10 min`. `current > reference` widens rather than
- * truncates so live duration metadata catches up cleanly.
- */
+/** Format `current` matching `reference`'s segment structure for a stable-width clock. */
 export function formatTimeLike(current: number, reference: number): string {
     if (!Number.isFinite(reference) || reference <= 0) {
         return formatDuration(current);
@@ -49,16 +39,12 @@ export function formatTimeLike(current: number, reference: number): string {
     return `${m}:${pad2(s)}`;
 }
 
-/** Convenience wrapper for callers that hold a milliseconds value. */
 export function formatDurationMs(ms: number): string {
     if (!Number.isFinite(ms) || ms < 0) return "0:00";
     return formatDuration(ms / 1000);
 }
 
-/**
- * Compact duration: `X min` under an hour, `X.Y h` above. For stat
- * surfaces that want a single human number instead of a clock display.
- */
+/** Compact duration: `X min` under an hour, `X.Y h`/`Xh` above. */
 export function formatHoursCompact(ms: number): string {
     if (!Number.isFinite(ms) || ms <= 0) return "0 min";
     const minutes = ms / 60_000;

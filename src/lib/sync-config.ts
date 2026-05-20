@@ -1,20 +1,15 @@
 export const SYNC_CONFIG = {
-    /** Default sync interval in ms (env: `NEXT_PUBLIC_SYNC_INTERVAL`). */
     defaultInterval: parseInt(
         process.env.NEXT_PUBLIC_SYNC_INTERVAL || "300000",
         10,
     ),
-    /** Minimum interval between syncs in ms (env: `NEXT_PUBLIC_MIN_SYNC_INTERVAL`). */
     minInterval: parseInt(
         process.env.NEXT_PUBLIC_MIN_SYNC_INTERVAL || "60000",
         10,
     ),
-    /** Sync on app mount (env: `NEXT_PUBLIC_SYNC_ON_MOUNT`). */
     syncOnMount: process.env.NEXT_PUBLIC_SYNC_ON_MOUNT !== "false",
-    /** Sync when tab becomes visible (env: `NEXT_PUBLIC_SYNC_ON_VISIBILITY`). */
     syncOnVisibilityChange:
         process.env.NEXT_PUBLIC_SYNC_ON_VISIBILITY !== "false",
-    /** Interval presets surfaced in the settings dropdown (ms). */
     intervalPresets: {
         "1 minute": 60 * 1000,
         "2 minutes": 2 * 60 * 1000,
@@ -26,10 +21,6 @@ export const SYNC_CONFIG = {
     },
 } as const;
 
-/**
- * Fetch sync settings via `/api/settings/user`. Falls back to
- * localStorage for backwards compatibility with pre-DB-settings rows.
- */
 export async function getSyncSettings(): Promise<{
     syncInterval: number;
     autoSyncEnabled: boolean;
@@ -65,7 +56,6 @@ export async function getSyncSettings(): Promise<{
         console.error("Failed to fetch sync settings:", error);
     }
 
-    // Fallback to localStorage for backwards compatibility
     const storedInterval = localStorage.getItem("openplaud_sync_interval");
     const storedEnabled = localStorage.getItem("openplaud_auto_sync_enabled");
 

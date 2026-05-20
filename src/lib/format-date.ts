@@ -28,20 +28,13 @@ export function formatDateTime(
     }
 }
 
-/**
- * Bucket a date into a recording-list group label, ordered newest -> oldest:
- *   Today | Yesterday | This week | Earlier this month |
- *   <Month> (current year) | <Month YYYY> (previous years).
- * Returns a label only; does not re-sort.
- */
+/** Recording-list group label: Today / Yesterday / This week / month / Month YYYY. */
 export function dateGroupLabel(date: Date | string): string {
     const d = typeof date === "string" ? new Date(date) : date;
     if (isToday(d)) return "Today";
     if (isYesterday(d)) return "Yesterday";
     const now = new Date();
     const days = differenceInDays(now, d);
-    // `days >= 0` guard so future-dated items (clock skew) don't land
-    // in "This week" and instead fall through to the month bucket.
     if (days >= 0 && days < 7) return "This week";
     if (
         d.getMonth() === now.getMonth() &&

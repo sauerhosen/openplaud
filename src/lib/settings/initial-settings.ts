@@ -1,12 +1,3 @@
-/**
- * Typed `InitialSettings` shape that server components feed into the
- * dashboard / recording workstation, plus the row -> shape adapter.
- *
- * Slice of the wider `/api/settings/user` `DEFAULT_SETTINGS`. New
- * dashboard-rendered preferences must be added here AND to the route
- * defaults together to keep the two in lockstep.
- */
-
 import type { userSettings } from "@/db/schema";
 
 export interface InitialSettings {
@@ -37,7 +28,7 @@ export const INITIAL_SETTINGS_DEFAULTS: InitialSettings = {
     defaultVolume: 75,
     autoPlayNext: false,
     playerScrubber: "waveform",
-    syncInterval: 300_000, // 5 minutes
+    syncInterval: 300_000,
     autoSyncEnabled: true,
     syncOnMount: true,
     syncOnVisibilityChange: true,
@@ -47,10 +38,6 @@ export const INITIAL_SETTINGS_DEFAULTS: InitialSettings = {
 
 type Row = typeof userSettings.$inferSelect | undefined | null;
 
-/**
- * Coalesce a `user_settings` row into typed `InitialSettings`,
- * narrowing varchar columns back into their literal-union types.
- */
 export function initialSettingsFromRow(row: Row): InitialSettings {
     const r = row ?? undefined;
     return {

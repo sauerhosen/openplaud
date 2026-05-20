@@ -6,21 +6,12 @@ import type {
 
 export type ResponseFormat = "diarized_json" | "json" | "verbose_json";
 
-/**
- * Pick the `response_format` for a given transcription model:
- * `"diarized_json"` for diarize models, `"json"` for gpt-4o (which
- * rejects `verbose_json`), `"verbose_json"` otherwise.
- */
 export function getResponseFormat(model: string): ResponseFormat {
     if (model.includes("diarize")) return "diarized_json";
     if (model.startsWith("gpt-4o")) return "json";
     return "verbose_json";
 }
 
-/**
- * Normalise the transcription response from any supported format into a
- * simple `{ text, detectedLanguage }` pair.
- */
 export function parseTranscriptionResponse(
     transcription: unknown,
     responseFormat: ResponseFormat,
@@ -41,18 +32,12 @@ export function parseTranscriptionResponse(
         };
     }
 
-    // plain "json" — gpt-4o path
     const plain = transcription as { text?: string };
     const text =
         typeof transcription === "string" ? transcription : (plain.text ?? "");
     return { text, detectedLanguage: null };
 }
 
-/**
- * Build params for `openai.audio.transcriptions.create`. Diarize
- * requests must include `chunking_strategy: "auto"` (issue #101);
- * `language` is sent only when set.
- */
 export function buildTranscriptionParams(args: {
     file: File;
     model: string;
