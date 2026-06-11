@@ -22,6 +22,7 @@ import {
     getResponseFormat,
     parseTranscriptionResponse,
 } from "@/lib/transcription/format";
+import { geminiTranscribe } from "@/lib/transcription/gemini-transcribe";
 import { emitEvent } from "@/lib/webhooks/emit";
 
 /**
@@ -165,10 +166,6 @@ export async function transcribeRecording(
         void quality;
 
         const apiKey = decrypt(credentials.apiKey);
-        const openai = new OpenAI({
-            apiKey,
-            baseURL: credentials.baseUrl || undefined,
-        });
 
         const storage = await createUserStorageProvider(userId);
         const audioBuffer = await storage.downloadFile(recording.storagePath);
@@ -184,19 +181,18 @@ export async function transcribeRecording(
 
         const model = opts.model || credentials.defaultModel || "whisper-1";
 
-        // Chat-style providers (OpenRouter today) don't implement
-        // `/v1/audio/transcriptions` — calling that path returns a 404
-        // with a non-JSON body that crashes the OpenAI SDK's response
-        // parser (issue #122). Route those through chat-completions
-        // with an `input_audio` content part instead.
+        // Route based on the provider's transcription style:
+        // - "gemini": Google Gemini native generateContent API (inlineData)
+        // - "chat": OpenAI-compatible chat completions with input_audio
+        // - "whisper": OpenAI-compatible /v1/audio/transcriptions
         const transcriptionStyle = getTranscriptionStyle(credentials.provider);
 
         let transcriptionText: string;
         let detectedLanguage: string | null;
 
-        if (transcriptionStyle === "chat") {
-            const result = await chatTranscribe({
-                client: openai,
+        if (transcriptionStyle === "gemini") {
+            const result = await geminiTranscribe({
+                apiKey,
                 model,
                 audioBuffer,
                 contentType,
@@ -205,46 +201,63 @@ export async function transcribeRecording(
             transcriptionText = result.text;
             detectedLanguage = result.detectedLanguage;
         } else {
-            const responseFormat = getResponseFormat(model);
+            const openai = new OpenAI({
+                apiKey,
+                baseURL: credentials.baseUrl || undefined,
+            });
 
-            // OpenAI's /v1/audio/transcriptions endpoint has a hard 25 MiB
-            // per-request limit (https://platform.openai.com/docs/guides/speech-to-text).
-            // For meeting-length recordings that limit is the common case,
-            // not the edge case — fall back to a mono Opus re-encode so the
-            // 3 h+ uploads users actually have don't get rejected with a 413.
-            const compressed = await maybeCompressForWhisper(
-                audioBuffer,
-                contentType,
-            );
-            const fileToSend = compressed.compressed
-                ? buildAudioFile(
-                      compressed.buffer,
-                      recording.storagePath,
-                      decryptedFilename,
-                  ).file
-                : audioFile;
-
-            // Whisper-1 transcribes at roughly 0.1-0.3x realtime on
-            // OpenAI's infrastructure, so a 3 h compressed recording can
-            // legitimately keep the request open for 20-40 minutes. The
-            // SDK default (10 min) times out long before that. Override
-            // per-request so unrelated OpenAI calls (e.g. title generation)
-            // keep the shorter default.
-            const transcription = await openai.audio.transcriptions.create(
-                buildTranscriptionParams({
-                    file: fileToSend,
+            if (transcriptionStyle === "chat") {
+                const result = await chatTranscribe({
+                    client: openai,
                     model,
-                    responseFormat,
+                    audioBuffer,
+                    contentType,
                     language: defaultLanguage,
-                }),
-                { timeout: whisperRequestTimeoutMs() },
-            );
-            const parsed = parseTranscriptionResponse(
-                transcription,
-                responseFormat,
-            );
-            transcriptionText = parsed.text;
-            detectedLanguage = parsed.detectedLanguage;
+                });
+                transcriptionText = result.text;
+                detectedLanguage = result.detectedLanguage;
+            } else {
+                const responseFormat = getResponseFormat(model);
+
+                // OpenAI's /v1/audio/transcriptions endpoint has a hard 25 MiB
+                // per-request limit (https://platform.openai.com/docs/guides/speech-to-text).
+                // For meeting-length recordings that limit is the common case,
+                // not the edge case — fall back to a mono Opus re-encode so the
+                // 3 h+ uploads users actually have don't get rejected with a 413.
+                const compressed = await maybeCompressForWhisper(
+                    audioBuffer,
+                    contentType,
+                );
+                const fileToSend = compressed.compressed
+                    ? buildAudioFile(
+                          compressed.buffer,
+                          recording.storagePath,
+                          decryptedFilename,
+                      ).file
+                    : audioFile;
+
+                // Whisper-1 transcribes at roughly 0.1-0.3x realtime on
+                // OpenAI's infrastructure, so a 3 h compressed recording can
+                // legitimately keep the request open for 20-40 minutes. The
+                // SDK default (10 min) times out long before that. Override
+                // per-request so unrelated OpenAI calls (e.g. title generation)
+                // keep the shorter default.
+                const transcription = await openai.audio.transcriptions.create(
+                    buildTranscriptionParams({
+                        file: fileToSend,
+                        model,
+                        responseFormat,
+                        language: defaultLanguage,
+                    }),
+                    { timeout: whisperRequestTimeoutMs() },
+                );
+                const parsed = parseTranscriptionResponse(
+                    transcription,
+                    responseFormat,
+                );
+                transcriptionText = parsed.text;
+                detectedLanguage = parsed.detectedLanguage;
+            }
         }
 
         const RECORDING_TOMBSTONED = Symbol("recording-tombstoned");
